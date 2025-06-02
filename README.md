@@ -28,7 +28,7 @@ speech_to_text_playground/
 ## 必要なもの
 
 -   Python 3.7 以降 (Python 3.13 で動作確認済み)
--   pip (Pythonパッケージインストーラ)
+-   uv (Pythonパッケージインストーラ)
 -   `ffmpeg`: より広範な音声フォーマットをサポートするために推奨されます。
     -   Linux: `sudo apt-get install ffmpeg`
     -   macOS: `brew install ffmpeg`
@@ -41,32 +41,17 @@ speech_to_text_playground/
 
 2.  **Python仮想環境の作成と有効化 (推奨)**:
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # Linux/macOSの場合
-    # venv\Scripts\activate    # Windowsの場合
+    uv sync
     ```
-
-3.  **必要なPythonライブラリのインストール**:
-    プロジェクトのルートディレクトリ（`speech_to_text_playground`）で以下のコマンドを実行します。
-    ```bash
-    pip install Flask torch torchaudio transformers
-    ```
-    -   **NVIDIA GPUユーザー向け注意**: PyTorchがCUDAをサポートするバージョンでインストールされていることを確認してください。適切なコマンドは[PyTorch公式サイト](https://pytorch.org/get-started/locally/)で確認できます（例: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118` ※CUDAのバージョンに合わせてください）。
-    -   **Apple Silicon GPUユーザー向け注意**: 最新バージョンのPyTorchはMPSをサポートしています。通常通りインストールすれば問題ありません。
 
 ## アプリケーションの実行方法
 
-1.  プロジェクトのルートディレクトリ（`speech_to_text_playground`）に移動します。
+1.  Flaskアプリケーションを起動します。
     ```bash
-    cd path/to/speech_to_text_playground
+    uv run app.py
     ```
 
-2.  Flaskアプリケーションを起動します。
-    ```bash
-    python app.py
-    ```
-
-3.  ウェブブラウザを開き、アドレスバーに `http://127.0.0.1:5000/` または `http://localhost:5000/` と入力してアクセスします。
+2.  ウェブブラウザを開き、アドレスバーに `http://127.0.0.1:5000/` または `http://localhost:5000/` と入力してアクセスします。
 
 ## 使用方法
 
