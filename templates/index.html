@@ -18,7 +18,7 @@
         .success-message { color: #2f855a; background-color: #c6f6d5; border: 1px solid #68d391;}
         .task-item { border: 1px solid #e2e8f0; padding: 10px; margin-bottom:10px; border-radius: 8px; background-color: #f8fafc; }
         .task-item p { margin-bottom: 0.5em; }
-        .task-id { font-family: monospace; background-color: #e2e8f0; padding: 0.2em 0.4em; border-radius: 4px; font-size:0.9em; }
+        .task-id { font-family: monospace; background-color: #e2e8f0; padding: 0.2em 0.4em; border-radius: 4px; font-size:0.9em; word-break: break-all; }
         .progress-bar-container { width: 100%; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; height: 8px; margin-top:5px; }
         .progress-bar { width: 0%; height: 100%; background-color: #4ade80; /* green-400 */ transition: width 0.3s ease-in-out; }
         .progress-bar.processing { background-color: #60a5fa; /* blue-400 */}
@@ -31,6 +31,7 @@
             border-radius: 0.375rem; /* rounded-md */
             transition: background-color 0.2s;
             float: right; /* 右寄せ */
+            cursor: pointer;
         }
         .delete-task-button:hover {
             background-color: #fecaca; /* red-200 */
@@ -87,9 +88,8 @@
         const noTasksMessage = document.getElementById('no-tasks-message');
         const globalMessageArea = document.getElementById('global-message-area');
         const defaultModelName = 'openai/whisper-base';
-        const TASK_IDS_STORAGE_KEY = 'transcription_task_ids';
-        const MODEL_NAME_STORAGE_PREFIX = 'model_for_task_'; // モデル名をタスクIDに関連付けて保存するためのプレフィックス
-        let pollingIntervals = {}; // To store interval IDs for each task
+        const TASK_IDS_STORAGE_KEY = 'transcription_task_ids'; // 保存するキー名
+        let pollingIntervals = {}; 
 
         function displayGlobalMessage(message, type = 'info') {
             globalMessageArea.innerHTML = `<div class="message ${type}-message">${message}</div>`;
@@ -104,56 +104,70 @@
             localStorage.setItem('hf_model_name', modelNameInput.value.trim() || defaultModelName);
         }
         
-        audioFileInput.addEventListener('change', () => {
-            fileNameDisplay.textContent = audioFileInput.files.length > 0 ? audioFileInput.files[0].name : '';
-        });
+        if(audioFileInput) {
+            audioFileInput.addEventListener('change', () => {
+                if(fileNameDisplay) fileNameDisplay.textContent = audioFileInput.files.length > 0 ? audioFileInput.files[0].name : '';
+            });
+        }
 
-        uploadForm.addEventListener('submit', async function(event) {
-            event.preventDefault();
-            saveModelNameToStorage();
+        if(uploadForm) {
+            uploadForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                saveModelNameToStorage();
 
-            if (!audioFileInput.files.length) {
-                displayGlobalMessage('エラー: 音声ファイルを選択してください。', 'error');
-                return;
-            }
-
-            submitButton.disabled = true;
-            submitButton.querySelector('#button-text').textContent = '送信中...';
-            displayGlobalMessage('タスクをサーバーに送信しています...', 'info');
-
-            const formData = new FormData();
-            formData.append('audio_file', audioFileInput.files[0]);
-            const currentModelName = modelNameInput.value.trim() || defaultModelName;
-            formData.append('model_name', currentModelName);
-
-            try {
-                const response = await fetch("{{ url_for('submit_task') }}", {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                const data = await response.json();
-
-                if (response.ok && data.task_id) {
-                    displayGlobalMessage(`タスク ${data.task_id} を受付ました。処理を開始します。`, 'success');
-                    addOrUpdateTaskInList(data.task_id, data.model_name_used || currentModelName);
-                    storeTaskId(data.task_id, data.model_name_used || currentModelName); // モデル名も一緒に保存
-                    pollTaskStatus(data.task_id);
-                } else {
-                    displayGlobalMessage(`エラー: ${data.error || 'タスクの送信に失敗しました。'}`, 'error');
+                if (!audioFileInput || !audioFileInput.files.length) {
+                    displayGlobalMessage('エラー: 音声ファイルを選択してください。', 'error');
+                    return;
                 }
-            } catch (error) {
-                console.error('送信エラー:', error);
-                displayGlobalMessage(`送信エラー: ${error.message}`, 'error');
-            } finally {
-                submitButton.disabled = false;
-                submitButton.querySelector('#button-text').textContent = '文字起こしタスク実行';
-                audioFileInput.value = ''; // Clear file input
-                fileNameDisplay.textContent = '';
-            }
-        });
+
+                if(submitButton) {
+                    submitButton.disabled = true;
+                    const buttonTextSpan = submitButton.querySelector('#button-text');
+                    if(buttonTextSpan) buttonTextSpan.textContent = '送信中...';
+                }
+                displayGlobalMessage('タスクをサーバーに送信しています...', 'info');
+
+                const formData = new FormData();
+                formData.append('audio_file', audioFileInput.files[0]);
+                const currentModelName = modelNameInput.value.trim() || defaultModelName;
+                formData.append('model_name', currentModelName);
+
+                try {
+                    const response = await fetch("{{ url_for('submit_task') }}", {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.task_id) { // data.task_id の存在も確認
+                        displayGlobalMessage(`タスク ${data.task_id.substring(0,8)}... を受付ました。処理を開始します。`, 'success');
+                        addOrUpdateTaskInList(data.task_id, data.model_name_used || currentModelName);
+                        storeTaskInfo(data.task_id, data.model_name_used || currentModelName); 
+                        pollTaskStatus(data.task_id);
+                    } else {
+                        displayGlobalMessage(`エラー: ${data.error || 'タスクの送信に失敗しました。'}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('送信エラー:', error);
+                    displayGlobalMessage(`送信エラー: ${error.message}`, 'error');
+                } finally {
+                    if(submitButton) {
+                        submitButton.disabled = false;
+                        const buttonTextSpan = submitButton.querySelector('#button-text');
+                        if(buttonTextSpan) buttonTextSpan.textContent = '文字起こしタスク実行';
+                    }
+                    if(audioFileInput) audioFileInput.value = ''; 
+                    if(fileNameDisplay) fileNameDisplay.textContent = '';
+                }
+            });
+        }
 
         function addOrUpdateTaskInList(taskId, modelName, initialStatus = '状態確認中...') {
+            if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
+                console.warn('addOrUpdateTaskInList: 無効なtaskIdです:', taskId);
+                return; // 無効なIDの場合は何もしない
+            }
             if (noTasksMessage) noTasksMessage.style.display = 'none';
 
             let taskItem = document.getElementById(`task-${taskId}`);
@@ -161,12 +175,12 @@
                 taskItem = document.createElement('div');
                 taskItem.id = `task-${taskId}`;
                 taskItem.className = 'task-item';
-                taskListDiv.prepend(taskItem); // Add new tasks to the top
+                if(taskListDiv) taskListDiv.prepend(taskItem); 
             }
 
             taskItem.innerHTML = `
                 <button class="delete-task-button" data-task-id="${taskId}" title="このタスクをリストから削除">×</button>
-                <p><strong>タスクID:</strong> <span class="task-id">${taskId}</span></p>
+                <p><strong>タスクID:</strong> <span class="task-id">${taskId.substring(0,8)}...</span></p>
                 <p><strong>モデル:</strong> <span class="model-name-display">${modelName || 'N/A'}</span></p>
                 <p><strong>状態:</strong> <span class="status-text">${initialStatus}</span></p>
                 <div class="progress-bar-container">
@@ -176,16 +190,17 @@
                 <div class="error-details mt-2 p-2 text-red-700 bg-red-100 border-red-300 rounded" style="display:none;"></div>
                 <button class="download-txt-button mt-2 px-3 py-1 border border-gray-300 text-sm rounded text-gray-700 bg-white hover:bg-gray-50" style="display:none;">TXTダウンロード</button>
             `;
-            // 削除ボタンにイベントリスナーを追加
-            taskItem.querySelector('.delete-task-button').addEventListener('click', handleDeleteTask);
+            const deleteButton = taskItem.querySelector('.delete-task-button');
+            if(deleteButton) deleteButton.addEventListener('click', handleDeleteTask);
         }
         
         function updateTaskProgressUI(taskItem, percentage, statusText) {
+            if (!taskItem) return;
             const progressBar = taskItem.querySelector('.progress-bar');
             const statusTextElement = taskItem.querySelector('.status-text');
             if(progressBar) {
                 progressBar.style.width = `${percentage}%`;
-                if (statusText.includes('処理中') || statusText.includes('モデル準備中')) {
+                if (statusText && (statusText.includes('処理中') || statusText.includes('モデル準備中'))) {
                     progressBar.classList.add('processing');
                 } else {
                      progressBar.classList.remove('processing');
@@ -195,8 +210,9 @@
         }
 
         async function pollTaskStatus(taskId) {
+            if (!taskId) return; // 無効なIDの場合はポーリングしない
             const taskItem = document.getElementById(`task-${taskId}`);
-            if (!taskItem) { // タスクアイテムがUIから削除されていたらポーリング停止
+            if (!taskItem) { 
                 clearInterval(pollingIntervals[taskId]);
                 delete pollingIntervals[taskId];
                 return;
@@ -205,7 +221,7 @@
             const modelNameDisplay = taskItem.querySelector('.model-name-display');
 
             pollingIntervals[taskId] = setInterval(async () => {
-                if (!document.getElementById(`task-${taskId}`)) { // 再度チェック (インターバル中に削除される可能性)
+                if (!document.getElementById(`task-${taskId}`)) { 
                     clearInterval(pollingIntervals[taskId]);
                     delete pollingIntervals[taskId];
                     return;
@@ -213,11 +229,10 @@
                 try {
                     const response = await fetch(`{{ url_for('get_task_status', task_id='TASK_ID_PLACEHOLDER') }}`.replace('TASK_ID_PLACEHOLDER', taskId));
                     if (!response.ok) {
-                        console.error(`タスク ${taskId} の状態取得エラー: ${response.status}`);
+                        console.error(`タスク ${taskId.substring(0,8)}... の状態取得エラー: ${response.status}`);
                         updateTaskProgressUI(taskItem, 0, `状態取得エラー (${response.status})`);
-                        // 404 (Not Found) の場合はタスクがサーバーに存在しない可能性が高いのでポーリング停止
                         if (response.status === 404) {
-                             updateTaskProgressUI(taskItem, 0, `タスクが見つかりません (サーバー確認)`);
+                             updateTaskProgressUI(taskItem, 0, `タスクが見つかりません`);
                              clearInterval(pollingIntervals[taskId]);
                              delete pollingIntervals[taskId];
                         }
@@ -230,30 +245,40 @@
                     const errorDetailsDiv = taskItem.querySelector('.error-details');
                     const downloadButton = taskItem.querySelector('.download-txt-button');
 
-                    if (modelNameDisplay && data.model && data.model !== 'N/A') { // モデル名が取得できたら更新
+                    if (modelNameDisplay && data.model && data.model !== 'N/A') { 
                         modelNameDisplay.textContent = data.model;
                     }
-                    statusTextElement.textContent = data.status_message || data.state;
+                    if(statusTextElement) statusTextElement.textContent = data.status_message || data.state;
                     
                     if (data.state === 'PROGRESS') {
                         updateTaskProgressUI(taskItem, 50, data.status_message || '処理中...'); 
                     } else if (data.state === 'SUCCESS') {
                         updateTaskProgressUI(taskItem, 100, data.status_message || '処理完了');
-                        transcriptionResultDiv.textContent = data.transcription;
-                        transcriptionResultDiv.style.display = 'block';
-                        downloadButton.style.display = 'inline-block';
-                        downloadButton.onclick = () => downloadText(taskId, data.transcription);
+                        if(transcriptionResultDiv) {
+                            transcriptionResultDiv.textContent = data.transcription;
+                            transcriptionResultDiv.style.display = 'block';
+                        }
+                        if(downloadButton) {
+                            downloadButton.style.display = 'inline-block';
+                            downloadButton.onclick = () => downloadText(taskId, data.transcription);
+                        }
                         clearInterval(pollingIntervals[taskId]);
                         delete pollingIntervals[taskId];
-                        taskItem.querySelector('.progress-bar').classList.remove('processing');
-                        taskItem.querySelector('.progress-bar').style.backgroundColor = '#4ade80'; 
+                        const progressBar = taskItem.querySelector('.progress-bar');
+                        if(progressBar) {
+                            progressBar.classList.remove('processing');
+                            progressBar.style.backgroundColor = '#4ade80'; 
+                        }
                     } else if (data.state === 'FAILURE') {
                         updateTaskProgressUI(taskItem, 100, data.status_message || 'エラー');
-                        errorDetailsDiv.textContent = `エラー詳細: ${data.error || '不明なエラー'}`;
-                        errorDetailsDiv.style.display = 'block';
+                        if(errorDetailsDiv) {
+                            errorDetailsDiv.textContent = `エラー詳細: ${data.error || '不明なエラー'}`;
+                            errorDetailsDiv.style.display = 'block';
+                        }
                         clearInterval(pollingIntervals[taskId]);
                         delete pollingIntervals[taskId];
-                        taskItem.querySelector('.progress-bar').style.backgroundColor = '#f87171'; 
+                        const progressBar = taskItem.querySelector('.progress-bar');
+                        if(progressBar) progressBar.style.backgroundColor = '#f87171'; 
                     } else if (data.state === 'PENDING') {
                         updateTaskProgressUI(taskItem, 10, data.status_message || '待機中...');
                     }
@@ -279,59 +304,77 @@
             URL.revokeObjectURL(url);
         }
 
-        function getStoredTasks() { // オブジェクトの配列としてタスクIDとモデル名を取得
+        function getStoredTasks() { 
             const stored = localStorage.getItem(TASK_IDS_STORAGE_KEY);
-            return stored ? JSON.parse(stored) : [];
+            try {
+                const parsed = stored ? JSON.parse(stored) : [];
+                // ★★★ 修正: 不正な形式のデータをフィルタリング ★★★
+                if (Array.isArray(parsed)) {
+                    return parsed.filter(task => task && typeof task.id === 'string' && task.id.trim() !== '');
+                }
+                return [];
+            } catch (e) {
+                console.error("LocalStorageのタスクデータ解析エラー:", e);
+                return []; // 解析エラー時は空配列を返す
+            }
         }
 
-        function storeTaskId(taskId, modelName) { // タスクIDとモデル名をオブジェクトとして保存
-            let tasks = getStoredTasks();
-            // 既に同じIDのタスクがあれば更新、なければ追加
-            const existingTaskIndex = tasks.findIndex(task => task.id === taskId);
-            if (existingTaskIndex > -1) {
-                tasks[existingTaskIndex].model = modelName; // モデル名を更新
-            } else {
-                tasks.unshift({ id: taskId, model: modelName }); // 新しいタスクを先頭に追加
+        function storeTaskInfo(taskId, modelName) { 
+            // ★★★ 修正: 無効なtaskIdが保存されないようにガード ★★★
+            if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
+                console.warn('storeTaskInfo: 無効なtaskIdのため保存しません:', taskId);
+                return;
             }
-            tasks = tasks.slice(0, 10); // 最新10件に制限
+            let tasks = getStoredTasks(); 
+            const existingTaskIndex = tasks.findIndex(task => task.id === taskId);
+            const taskInfo = { id: taskId, model: modelName || 'N/A' }; // モデル名もN/Aフォールバック
+
+            if (existingTaskIndex > -1) {
+                tasks[existingTaskIndex] = taskInfo; 
+            } else {
+                tasks.unshift(taskInfo); 
+            }
+            tasks = tasks.slice(0, 10); 
             localStorage.setItem(TASK_IDS_STORAGE_KEY, JSON.stringify(tasks));
         }
         
-        function removeTaskIdFromStorage(taskIdToRemove) {
+        function removeTaskFromStorage(taskIdToRemove) {
             let tasks = getStoredTasks();
             tasks = tasks.filter(task => task.id !== taskIdToRemove);
             localStorage.setItem(TASK_IDS_STORAGE_KEY, JSON.stringify(tasks));
-            localStorage.removeItem(MODEL_NAME_STORAGE_PREFIX + taskIdToRemove); // 古い形式のモデル名も削除 (念のため)
         }
 
         function handleDeleteTask(event) {
             const taskId = event.target.dataset.taskId;
             if (confirm(`タスク ${taskId.substring(0,8)}... をリストから削除しますか？\n(サーバー上の処理は停止しません)`)) {
-                // ポーリングを停止
                 if (pollingIntervals[taskId]) {
                     clearInterval(pollingIntervals[taskId]);
                     delete pollingIntervals[taskId];
                 }
-                // LocalStorageから削除
-                removeTaskIdFromStorage(taskId);
-                // UIから削除
+                removeTaskFromStorage(taskId);
                 const taskItem = document.getElementById(`task-${taskId}`);
                 if (taskItem) {
                     taskItem.remove();
                 }
-                // タスクがなくなったら「タスクはありません」メッセージを再表示
-                if (taskListDiv.children.length === 0 || (taskListDiv.children.length === 1 && taskListDiv.children[0].id === 'no-tasks-message')) {
-                     if(noTasksMessage) noTasksMessage.style.display = 'block';
+                const currentTasks = getStoredTasks(); // 更新後のリストを取得
+                if (currentTasks.length === 0 && noTasksMessage) {
+                     noTasksMessage.style.display = 'block';
                 }
                  displayGlobalMessage(`タスク ${taskId.substring(0,8)}... をリストから削除しました。`, 'info');
             }
         }
 
         function loadAndPollStoredTasks() {
-            const tasks = getStoredTasks();
+            const tasks = getStoredTasks(); // ここで既にフィルタリングされる
+            // ★★★ 修正: フィルタリング後のクリーンなデータをLocalStorageに再保存 ★★★
+            localStorage.setItem(TASK_IDS_STORAGE_KEY, JSON.stringify(tasks));
+
+
             if (tasks.length > 0) {
                 if (noTasksMessage) noTasksMessage.style.display = 'none';
                 tasks.forEach(task => {
+                    // task.id はフィルタリングにより有効なはず
+                    // task.model がない場合も考慮 (addOrUpdateTaskInList内でN/Aになる)
                     addOrUpdateTaskInList(task.id, task.model, '状態確認中...');
                     pollTaskStatus(task.id); 
                 });
@@ -343,7 +386,7 @@
         // Initialize
         window.addEventListener('load', () => {
             loadModelNameFromStorage();
-            modelNameInput.addEventListener('change', saveModelNameToStorage);
+            if(modelNameInput) modelNameInput.addEventListener('change', saveModelNameToStorage);
             loadAndPollStoredTasks(); 
         });
     </script>

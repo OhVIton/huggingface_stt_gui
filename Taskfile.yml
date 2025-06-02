@@ -1,0 +1,93 @@
+# Taskfile.yml
+version: '3'
+
+vars:
+  VENV_DIR: .venv
+  PYTHON_INTERPRETER: "{{.VENV_DIR}}/bin/python" # Linux/macOS
+  # For Windows, you might need to adjust PYTHON_INTERPRETER or use `uv run` directly without it.
+  # PYTHON_INTERPRETER_WIN: "{{.VENV_DIR}}\\Scripts\\python.exe"
+  CELERY_APP: app.celery_app
+  FLASK_APP_FILE: app.py
+
+tasks:
+  default:
+    desc: "開発環境を起動します (Redis, Celeryワーカー, Flaskアプリ)。"
+    cmds:
+      - task: redis:up
+      - task: dev:all
+    silent: true
+
+  setup:
+    desc: "Python仮想環境を作成し、依存関係をインストールします。"
+    cmds:
+      - uv venv {{.VENV_DIR}}
+      - uv pip install Flask torch torchaudio transformers celery redis eventlet
+    status:
+      - test -d {{.VENV_DIR}}
+
+  redis:up:
+    desc: "Docker Composeを使用してRedisサーバーをバックグラウンドで起動します。"
+    cmds:
+      - docker-compose up -d
+    status:
+      # A simple check, might need a more robust way to check if redis is actually ready
+      - docker ps --filter "name=stt_redis" --filter "status=running" --quiet
+
+  redis:down:
+    desc: "Docker Composeを使用してRedisサーバーを停止します。"
+    cmds:
+      - docker-compose down
+
+  worker:
+    desc: "Celeryワーカーを起動します。"
+    sources:
+      - "{{.FLASK_APP_FILE}}"
+    cmds:
+      - echo "Celeryワーカーを起動中... (Ctrl+Cで停止)"
+      - uv run celery -A {{.CELERY_APP}} worker -l info -P eventlet
+    preconditions:
+      - test -d {{.VENV_DIR}} || msg "仮想環境がセットアップされていません。'task setup' を実行してください。"
+      - task: redis:up # Ensure redis is up before worker starts
+
+  web:
+    desc: "Flask Webアプリケーションを起動します (ポート58080)。"
+    sources:
+      - "{{.FLASK_APP_FILE}}"
+      - "templates/*.html"
+    cmds:
+      - echo "Flaskアプリケーションを http://localhost:58080 で起動中... (Ctrl+Cで停止)"
+      - uv run python {{.FLASK_APP_FILE}}
+    preconditions:
+      - test -d {{.VENV_DIR}} || msg "仮想環境がセットアップされていません。'task setup' を実行してください。"
+
+  dev:all:
+    desc: "CeleryワーカーとFlaskアプリを並行して起動します (フォアグラウンド)。"
+    cmds:
+      # This will run them sequentially in the same terminal if not using a process manager.
+      # For true parallel execution in different terminals, users would typically open multiple terminals.
+      # Taskfile v3 doesn't have built-in parallel execution for foreground tasks in the same way some tools do.
+      # We can suggest using a tool like 'overmind' or 'tmux' or just separate terminals.
+      # For simplicity here, we'll just list them. Users can run `task worker` and `task web` in separate terminals.
+      - echo "CeleryワーカーとFlaskアプリを起動するには、別々のターミナルで 'task worker' と 'task web' を実行してください。"
+      - echo "または、'task worker' をバックグラウンドで実行後、'task web' を実行してください。"
+      - echo "ここでは 'task web' をフォアグラウンドで起動します。ワーカーは別途起動してください。"
+      - task: web
+    preconditions:
+      - task: redis:up
+
+  logs:redis:
+    desc: "Redisコンテナのログを表示します。"
+    cmds:
+      - docker-compose logs -f redis
+
+  clean:
+    desc: "仮想環境とRedisのデータを削除します。"
+    cmds:
+      - rm -rf {{.VENV_DIR}}
+      - docker-compose down -v # -v オプションでボリュームも削除
+      - echo "クリーンアップ完了。"
+
+  lint: # Placeholder for linters if you add them
+    desc: "リンターを実行します (例: ruff, mypy)。"
+    cmds:
+      - echo "リンターが設定されていません。"
