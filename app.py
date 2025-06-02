@@ -17,8 +17,8 @@ app.secret_key = os.urandom(24)
 # Celeryの設定
 # RedisのURLを環境変数から取得するか、デフォルト値を設定
 # 例: redis://localhost:6379/0
-app.config['CELERY_BROKER_URL'] = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-app.config['CELERY_RESULT_BACKEND'] = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+app.config['CELERY_BROKER_URL'] = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:56379/0')
+app.config['CELERY_RESULT_BACKEND'] = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:56379/0')
 
 # Celeryインスタンスの作成
 # Flaskアプリケーションのコンテキスト内でタスクが実行されるようにする
