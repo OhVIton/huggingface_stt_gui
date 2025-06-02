@@ -1,0 +1,12 @@
+services:
+  redis:
+    image: "redis:alpine" # 公式のRedisイメージ (alpine版で軽量) を使用
+    container_name: stt_redis # コンテナ名を指定 (任意)
+    ports:
+      - "56379:6379" 
+    volumes:
+      - redis_data:/data # Redisのデータを永続化するための名前付きボリューム
+    restart: unless-stopped # コンテナが停止した場合、手動で停止しない限り再起動
+
+volumes:
+  redis_data: # 名前付きボリュームの定義 (データ永続化用)
