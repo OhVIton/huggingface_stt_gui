@@ -26,7 +26,7 @@ speech_to_text_playground/
 ├── compose.yml              # Docker Compose設定ファイル (Redis用)
 ├── Taskfile.yml             # Taskランナー設定ファイル
 └── README.md                # このファイル
-``
+```
 
 
 ## 必要なもの
