@@ -1,0 +1,95 @@
+# 音声文字起こしプレイグラウンド (Speech-to-Text Playground) - 動的モデル選択対応
+
+このプロジェクトは、Hugging FaceのSpeech-to-Textモデルを利用して、音声ファイルから文字起こしを行うシンプルなWebアプリケーションです。
+ユーザーはWebインターフェースを通じて音声ファイルをアップロードし、使用するHugging Faceモデルを動的に指定できます。選択されたモデル名はブラウザのLocalStorageに保存され、次回アクセス時にも保持されます。文字起こし結果は画面で確認したり、テキストファイルとしてダウンロードしたりすることができます。
+利用可能なGPU（NVIDIA CUDAまたはApple Silicon MPS）があれば、自動的に活用して処理を高速化します。
+
+## 主な機能
+
+-   **音声ファイルのアップロード**: WAV, MP3, FLAC, OGGなど、主要な音声フォーマットに対応。
+-   **動的なモデル選択**: GUI上でHugging Faceのモデル名（例: `openai/whisper-base`, `openai/whisper-small`など）を直接入力し、使用するモデルを変更可能。
+-   **モデル名のLocalStorage保存**: ユーザーが選択したモデル名をブラウザのLocalStorageに保存し、次回訪問時に自動的に読み込みます。
+-   **自動文字起こし**: アップロードされた音声を、指定されたモデルを使用してテキストに変換します。
+-   **GPUアクセラレーション**: NVIDIA GPU (CUDA) または Apple Silicon GPU (MPS) が利用可能な場合、自動で検出し使用します。GPUがない場合はCPUで動作します。
+-   **結果のダウンロード**: 文字起こし結果を`.txt`ファイルとしてダウンロードできます。
+-   **WebベースGUI**: ブラウザから簡単に操作できるユーザーインターフェース。
+
+## フォルダ構成
+
+
+speech_to_text_playground/
+├── app.py                   # Flaskアプリケーション本体 (Pythonスクリプト)
+├── templates/
+│   └── index.html           # WebページのHTMLテンプレート
+└── README.md                # このファイル
+
+
+## 必要なもの
+
+-   Python 3.7 以降 (Python 3.13 で動作確認済み)
+-   pip (Pythonパッケージインストーラ)
+-   `ffmpeg`: より広範な音声フォーマットをサポートするために推奨されます。
+    -   Linux: `sudo apt-get install ffmpeg`
+    -   macOS: `brew install ffmpeg`
+    -   Windows: [公式サイト](https://ffmpeg.org/download.html)からダウンロードし、PATHを通してください。
+
+## セットアップ手順
+
+1.  **リポジトリのクローンまたはファイルのダウンロード**:
+    このプロジェクトのファイル (`app.py`, `templates/index.html`, `README.md`) を上記のフォルダ構成通りに配置します。
+
+2.  **Python仮想環境の作成と有効化 (推奨)**:
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # Linux/macOSの場合
+    # venv\Scripts\activate    # Windowsの場合
+    ```
+
+3.  **必要なPythonライブラリのインストール**:
+    プロジェクトのルートディレクトリ（`speech_to_text_playground`）で以下のコマンドを実行します。
+    ```bash
+    pip install Flask torch torchaudio transformers
+    ```
+    -   **NVIDIA GPUユーザー向け注意**: PyTorchがCUDAをサポートするバージョンでインストールされていることを確認してください。適切なコマンドは[PyTorch公式サイト](https://pytorch.org/get-started/locally/)で確認できます（例: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118` ※CUDAのバージョンに合わせてください）。
+    -   **Apple Silicon GPUユーザー向け注意**: 最新バージョンのPyTorchはMPSをサポートしています。通常通りインストールすれば問題ありません。
+
+## アプリケーションの実行方法
+
+1.  プロジェクトのルートディレクトリ（`speech_to_text_playground`）に移動します。
+    ```bash
+    cd path/to/speech_to_text_playground
+    ```
+
+2.  Flaskアプリケーションを起動します。
+    ```bash
+    python app.py
+    ```
+
+3.  ウェブブラウザを開き、アドレスバーに `http://127.0.0.1:5000/` または `http://localhost:5000/` と入力してアクセスします。
+
+## 使用方法
+
+1.  **モデル名の指定**:
+    -   ページ上部の「Hugging Face モデル名:」という入力フィールドに、使用したいモデルの正確な名前（例: `openai/whisper-base`, `openai/whisper-small`, `facebook/wav2vec2-base-960h`など）を入力します。
+    -   入力されたモデル名はブラウザのLocalStorageに保存され、次回アクセス時にも保持されます。
+    -   モデル名を変更した場合、次に「文字起こし開始」ボタンを押した際に新しいモデルがバックエンドでロードされます。
+    -   入力がない場合は、デフォルトモデル (`openai/whisper-base`) が使用されます。
+
+2.  **音声ファイルの選択**:
+    -   「音声ファイルを選択 (またはドラッグ＆ドロップ)」エリアをクリックするか、音声ファイルをドラッグ＆ドロップして、文字起こししたいファイルを選択します。
+
+3.  **文字起こし開始**:
+    -   「文字起こし開始」ボタンをクリックします。処理が開始され、ローディングインジケータが表示されます。
+
+4.  **結果の確認とダウンロード**:
+    -   処理が完了すると、文字起こし結果が「文字起こし結果 (使用モデル: [モデル名]):」セクションに表示されます。
+    -   「TXTとしてダウンロード」ボタンをクリックすると、結果をテキストファイルとして保存できます。
+
+## 注意事項
+
+-   **モデルのロード時間**: 新しいモデルを指定した場合や、初めてそのモデルを使用する場合、バックエンドでモデルのダウンロードとロードが行われるため、時間がかかることがあります。Hugging Faceライブラリはダウンロードしたモデルをキャッシュするため、同じモデルの次回以降の使用は高速になります。
+-   **有効なモデル名**: Hugging Face Hub ([https://huggingface.co/models](https://huggingface.co/models)) で、`automatic-speech-recognition`タスクに対応した有効なモデル名を使用してください。無効なモデル名やタスクに非対応のモデル名を指定するとエラーが発生する可能性があります。
+-   **GPUの利用**: `app.py` 内で自動的にGPU（CUDAまたはMPS）の利用可否を判定します。利用可能な場合はGPUを使用し、そうでない場合はCPUを使用します。コンソールにどちらのデバイスが使用されているかが出力されます。
+-   **長い音声ファイル**: `app.py` 内の `pipeline` 設定で `chunk_length_s` や `stride_length_s` を調整することで、長い音声ファイルの処理を最適化できます。これらは現在、リクエストごとにモデルがロードされる際に固定値（`chunk_length_s=30`, `stride_length_s=5`）で設定されています。
+-   **エラー処理**: モデルのロード失敗や処理中のエラーが発生した場合、画面上にエラーメッセージが表示されます。詳細はサーバー側のコンソールログも確認してください。
+-   **フッターの年表示**: 以前のバージョンで発生していた `date` フィルターに関するエラーは、Flask側で現在の年を算出してテンプレートに渡すことで解決済みです。
