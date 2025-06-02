@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声文字起こしプレイグラウンド</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-box {
+            border: 2px dashed #cbd5e1;
+            padding: 40px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .upload-box:hover {
+            background-color: #f1f5f9;
+        }
+        .upload-box input[type="file"] {
+            display: none;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none; /* 初期状態では非表示 */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            color: #e53e3e; /* red-600 */
+            background-color: #fed7d7; /* red-200 */
+            border: 1px solid #f56565; /* red-400 */
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .info-message {
+            color: #3182ce; /* blue-600 */
+            background-color: #bee3f8; /* blue-200 */
+            border: 1px solid #63b3ed; /* blue-400 */
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="container bg-white shadow-lg rounded-lg mt-10 p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-600">音声文字起こしプレイグラウンド</h1>
+            <p class="text-gray-600 mt-2">Hugging Face Speech-to-Textモデルを利用しています。</p>
+        </header>
+
+        <div id="message-area">
+            {% if error %}
+            <div class="error-message" id="error-message-server">
+                <strong>エラー:</strong> {{ error }}
+            </div>
+            {% endif %}
+            {% if info %}
+            <div class="info-message" id="info-message-server">
+                {{ info }}
+            </div>
+            {% endif %}
+        </div>
+        
+        <form id="upload-form" action="{{ url_for('transcribe_audio') }}" method="POST" enctype="multipart/form-data" class="mb-8">
+            <div class="mb-6">
+                <label for="model-name-input" class="block text-sm font-medium text-gray-700 mb-1">Hugging Face モデル名:</label>
+                <input type="text" id="model-name-input" name="model_name" 
+                       class="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md p-2"
+                       placeholder="例: openai/whisper-base">
+                <p class="mt-1 text-xs text-gray-500">使用したいモデル名を入力してください。変更は次回送信時に適用されます。</p>
+            </div>
+
+            <label for="audio-file-input" class="upload-box block hover:bg-blue-50 transition duration-150 ease-in-out">
+                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="mt-2 block text-sm font-medium text-gray-700">
+                    音声ファイルを選択 (またはドラッグ＆ドロップ)
+                </span>
+                <span id="file-name" class="mt-1 block text-xs text-gray-500">対応形式: WAV, MP3, FLAC, OGGなど</span>
+                <input id="audio-file-input" name="audio_file" type="file" accept="audio/*" class="sr-only">
+            </label>
+            
+            <div class="mt-6 text-center">
+                <button type="submit" id="submit-button"
+                        class="w-full sm:w-auto inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out">
+                    <svg id="upload-icon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <svg id="processing-icon" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="button-text">文字起こし開始</span>
+                </button>
+            </div>
+        </form>
+
+        <div id="loader" class="loader"></div>
+
+        {% if transcription %}
+        <div id="result-area" class="mt-8 p-6 bg-gray-50 rounded-lg shadow">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">文字起こし結果 (使用モデル: {{ current_model_name | default('N/A') }}):</h2>
+                <button id="download-txt-button" 
+                        class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    TXTとしてダウンロード
+                </button>
+            </div>
+            <div id="transcription-text" class="prose max-w-none p-4 bg-white rounded border border-gray-200 whitespace-pre-wrap">{{ transcription }}</div>
+        </div>
+        {% endif %}
+        
+        <div id="client-error-message" class="error-message hidden mt-4"></div>
+
+    </div>
+
+    <footer class="text-center py-8 text-sm text-gray-500">
+        <p>&copy; {{ current_year | default('2024') }} 音声文字起こしプレイグラウンド</p>
+    </footer>
+
+    <script>
+        const uploadForm = document.getElementById('upload-form');
+        const audioFileInput = document.getElementById('audio-file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const loader = document.getElementById('loader');
+        const resultArea = document.getElementById('result-area');
+        const clientErrorMessage = document.getElementById('client-error-message');
+        const submitButton = document.getElementById('submit-button');
+        const buttonText = document.getElementById('button-text');
+        const uploadIcon = document.getElementById('upload-icon');
+        const processingIcon = document.getElementById('processing-icon');
+        const downloadTxtButton = document.getElementById('download-txt-button');
+        const transcriptionTextElement = document.getElementById('transcription-text');
+        const modelNameInput = document.getElementById('model-name-input');
+        const defaultModelName = 'openai/whisper-base'; // Default model if nothing else is set
+
+        // Load model name from LocalStorage or use server-provided or default
+        function loadModelName() {
+            const storedModel = localStorage.getItem('hf_model_name');
+            // Prioritize server-provided model name (e.g., after a POST), then LocalStorage, then default
+            const serverModel = "{{ current_model_name | default('', true) }}"; // Get model used in last POST
+            if (serverModel && serverModel !== "N/A") { // "N/A" はサーバーがモデル名を渡さなかった場合のデフォルトなので、これを除外
+                 modelNameInput.value = serverModel;
+            } else if (storedModel) {
+                modelNameInput.value = storedModel;
+            } else {
+                modelNameInput.value = defaultModelName;
+            }
+        }
+
+        // Save model name to LocalStorage
+        function saveModelName() {
+            if (modelNameInput.value.trim()) {
+                localStorage.setItem('hf_model_name', modelNameInput.value.trim());
+            } else { // If input is cleared, revert to default and save that
+                localStorage.setItem('hf_model_name', defaultModelName);
+                modelNameInput.value = defaultModelName; 
+            }
+        }
+        
+        window.addEventListener('load', () => {
+            loadModelName(); // Load model name when page loads
+
+            if (resultArea) {
+                resultArea.style.display = 'block';
+            }
+            if (downloadTxtButton && transcriptionTextElement) {
+                downloadTxtButton.addEventListener('click', () => {
+                    const textToSave = transcriptionTextElement.innerText || transcriptionTextElement.textContent;
+                    if (textToSave) {
+                        const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'transcription.txt';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } else {
+                        // ここではalertの代わりにカスタムメッセージ表示を検討できますが、簡潔さのためalertを残します。
+                        // もしalertを避けたい場合は、clientErrorMessageのような要素にメッセージをセットしてください。
+                        console.warn("ダウンロードする文字起こし結果がありません。");
+                        if(clientErrorMessage) {
+                            clientErrorMessage.textContent = 'ダウンロードする文字起こし結果がありません。';
+                            clientErrorMessage.classList.remove('hidden');
+                        } else {
+                            alert("ダウンロードする文字起こし結果がありません。");
+                        }
+                    }
+                });
+            }
+        });
+
+        // Save model name when it's changed by the user
+        if (modelNameInput) {
+            modelNameInput.addEventListener('change', saveModelName);
+        }
+        
+        // Drag and drop
+        const uploadBox = document.querySelector('.upload-box');
+        if (uploadBox) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadBox.addEventListener(eventName, preventDefaults, false);
+            });
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadBox.addEventListener(eventName, () => uploadBox.classList.add('bg-blue-50'), false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadBox.addEventListener(eventName, () => uploadBox.classList.remove('bg-blue-50'), false);
+            });
+            uploadBox.addEventListener('drop', handleDrop, false);
+        }
+
+        function handleDrop(e) {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            if (files.length > 0) {
+                if (audioFileInput) audioFileInput.files = files;
+                updateFileName();
+            }
+        }
+        
+        if (audioFileInput) {
+            audioFileInput.addEventListener('change', updateFileName);
+        }
+
+        function updateFileName() {
+            if (audioFileInput && audioFileInput.files.length > 0) {
+                if(fileNameDisplay) fileNameDisplay.textContent = audioFileInput.files[0].name;
+                if(clientErrorMessage) clientErrorMessage.classList.add('hidden');
+            } else {
+                if(fileNameDisplay) fileNameDisplay.textContent = '対応形式: WAV, MP3, FLAC, OGGなど';
+            }
+        }
+
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', function(event) {
+                saveModelName(); // Save model name before submitting
+
+                if (audioFileInput && audioFileInput.files.length === 0) {
+                    event.preventDefault(); 
+                    if(clientErrorMessage) {
+                        clientErrorMessage.textContent = 'エラー: 音声ファイルを選択してください。';
+                        clientErrorMessage.classList.remove('hidden');
+                    }
+                    return;
+                }
+                
+                const serverError = document.getElementById('error-message-server');
+                if (serverError) serverError.remove();
+                const serverInfo = document.getElementById('info-message-server');
+                if (serverInfo) serverInfo.remove();
+
+                if (resultArea) resultArea.style.display = 'none';
+                if(loader) loader.style.display = 'block';
+                if(submitButton) submitButton.disabled = true;
+                if(buttonText) buttonText.textContent = '処理中...';
+                if(uploadIcon) uploadIcon.classList.add('hidden');
+                if(processingIcon) processingIcon.classList.remove('hidden');
+            });
+        }
+        // Update footer year - JavaScriptでの動的更新は不要になったためコメントアウトまたは削除
+        // const yearSpan = document.querySelector('footer p');
+        // if (yearSpan) {
+        //     // Flaskから渡される current_year を使うので、ここでのJSによる書き換えは不要
+        // }
+    </script>
+</body>
+</html>
