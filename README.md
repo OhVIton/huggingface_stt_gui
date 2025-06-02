@@ -16,12 +16,13 @@
 
 ## フォルダ構成
 
-
+```
 speech_to_text_playground/
 ├── app.py                   # Flaskアプリケーション本体 (Pythonスクリプト)
 ├── templates/
 │   └── index.html           # WebページのHTMLテンプレート
 └── README.md                # このファイル
+```
 
 
 ## 必要なもの
